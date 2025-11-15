@@ -1,0 +1,4 @@
+include *.md
+recursive-include cruvitools/who-data-processed/complete-tables *.pkl
+recursive-include cruvitools/greulich-pyle-raw *.pkl
+recursive-include cruvitools *.py

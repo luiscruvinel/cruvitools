@@ -1,0 +1,5 @@
+pandas>=1.0.0
+openpyxl>=3.0.0
+
+[:python_version < "3.4"]
+pathlib

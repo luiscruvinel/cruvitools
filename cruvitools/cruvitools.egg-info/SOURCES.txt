@@ -1,0 +1,7 @@
+MANIFEST.in
+setup.py
+cruvitools.egg-info/PKG-INFO
+cruvitools.egg-info/SOURCES.txt
+cruvitools.egg-info/dependency_links.txt
+cruvitools.egg-info/requires.txt
+cruvitools.egg-info/top_level.txt
