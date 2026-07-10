@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="cruvitools",
-    version="1.1",
+    version="0.1",
     description="A package to process anthropometric data",
     author="Luis Eduardo Cruvinel Pinto",
     author_email="luiscruvinel@gmail.com",
