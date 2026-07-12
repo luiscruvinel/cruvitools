@@ -1,3 +1,6 @@
+# Development tools
+developmentscripts/
+
 # Python cache
 __pycache__/
 *.py[cod]

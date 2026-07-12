@@ -13,7 +13,7 @@ This approach avoids making assumptions about the distribution of data beyond th
 observed values (WHO Multicentre Growth Reference Study Group, 2006). 
 '''
 
-base_path = Path(__file__).resolve().parent / 'reference-data' / 'who-data-processed'
+base_path = Path(__file__).resolve().parent / 'reference-data'
 
 boys_height = pd.read_pickle(base_path / 'boys_height.pkl').set_index('Month')
 boys_weight = pd.read_pickle(base_path / 'boys_weight.pkl').set_index('Month')
