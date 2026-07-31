@@ -10,8 +10,15 @@ setup(
     install_requires=[
         "pandas>=1.0.0",
         "openpyxl>=3.0.0",
+        "typer>=0.12.0",
         "pathlib; python_version<'3.4'",
     ],
     python_requires=">=3.6",
     include_package_data=True, 
+
+    entry_points={
+        'console_scripts':[
+            'cruvitools=cruvitools.cli.main:app'
+        ]
+    }
 )

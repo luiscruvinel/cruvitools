@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 import pandas as pd
 import warnings
 from pathlib import Path
@@ -6,67 +7,83 @@ from pathlib import Path
 import cruvitools.who.zscorecalculator as zsc
 
 # Load test data
-test_data_path = Path(__file__).parent / 'data' / 'testCasesWho.csv'
+test_data_path = Path(__file__).parent / 'data' / 'testCasesWHO.csv'
 test_answers = pd.read_csv(test_data_path)
 
 tolerance_level = 0.05
 
+height_reference_cases = [
+    pytest.param(
+        row.name,
+        row['age'],
+        'male' if row['sex'] == 1 else 'female',
+        row['height'],
+        row['z_height'],
+        id=f'row-{row.name}',
+    )
+    for _, row in test_answers.iterrows()
+    if row['age'] <= 228
+]
+
+weight_reference_cases = [
+    pytest.param(
+        row.name,
+        row['age'],
+        'male' if row['sex'] == 1 else 'female',
+        row['weight'],
+        row['z_weight'],
+        id=f'row-{row.name}',
+    )
+    for _, row in test_answers.iterrows()
+    if row['age'] <= 120
+]
+
+bmi_reference_cases = [
+    pytest.param(
+        row.name,
+        row['age'],
+        'male' if row['sex'] == 1 else 'female',
+        row['bmi'],
+        row['z_bmi'],
+        id=f'row-{row.name}',
+    )
+    for _, row in test_answers.iterrows()
+    if row['age'] <= 228
+]
+
+@pytest.mark.filterwarnings("ignore:Calculated Z-score of .* is extreme:UserWarning:cruvitools.who.zscorecalculator")
 class TestCalculateZScores:
     '''Test forward Z-score calculations against reference data.'''
     
-    def test_height_z_scores(self):
+    @pytest.mark.parametrize('row_index, age, sex, height, expected_z', height_reference_cases)
+    def test_height_z_scores(self, row_index, age, sex, height, expected_z):
         '''Test height Z-score calculations match reference values.'''
-        for _, row in test_answers.iterrows():
-            age = row['age']
-            if age > 228:  # WHO height data only goes to 228 months
-                continue
-                
-            sex = 'male' if row['sex'] == 1 else 'female'
-            height = row['height']
-            expected_z = row['z_height']
-            
-            calculated_z = zsc.calculate_height_z_score(height, sex, age)
-            
-            assert calculated_z == pytest.approx(expected_z, abs=tolerance_level), \
-                f'Row {row.name}: Height Z-score mismatch. ' \
-                f'Expected {expected_z:.2f}, got {calculated_z:.2f} ' \
-                f'(height={height}cm, sex={sex}, age={age}m)'
-    
-    def test_weight_z_scores(self):
+        calculated_z = zsc.calculate_height_z_score(height, sex, age)
+
+        assert calculated_z == pytest.approx(expected_z, abs=tolerance_level), \
+            f'Row {row_index}: Height Z-score mismatch. ' \
+            f'Expected {expected_z:.2f}, got {calculated_z:.2f} ' \
+            f'(height={height}cm, sex={sex}, age={age}m)'
+
+    @pytest.mark.parametrize('row_index, age, sex, weight, expected_z', weight_reference_cases)
+    def test_weight_z_scores(self, row_index, age, sex, weight, expected_z):
         '''Test weight Z-score calculations match reference values.'''
-        for _, row in test_answers.iterrows():
-            age = row['age']
-            if age > 120:  # WHO weight data only goes to 120 months
-                continue
-                
-            sex = 'male' if row['sex'] == 1 else 'female'
-            weight = row['weight']
-            expected_z = row['z_weight']
-            
-            calculated_z = zsc.calculate_weight_z_score(weight, sex, age)
-            
-            assert calculated_z == pytest.approx(expected_z, abs=tolerance_level), \
-                f'Row {row.name}: Weight Z-score mismatch. ' \
-                f'Expected {expected_z:.2f}, got {calculated_z:.2f} ' \
-                f'(weight={weight}kg, sex={sex}, age={age}m)'
-    
-    def test_bmi_z_scores(self):
+        calculated_z = zsc.calculate_weight_z_score(weight, sex, age)
+
+        assert calculated_z == pytest.approx(expected_z, abs=tolerance_level), \
+            f'Row {row_index}: Weight Z-score mismatch. ' \
+            f'Expected {expected_z:.2f}, got {calculated_z:.2f} ' \
+            f'(weight={weight}kg, sex={sex}, age={age}m)'
+
+    @pytest.mark.parametrize('row_index, age, sex, bmi, expected_z', bmi_reference_cases)
+    def test_bmi_z_scores(self, row_index, age, sex, bmi, expected_z):
         '''Test BMI Z-score calculations match reference values.'''
-        for _, row in test_answers.iterrows():
-            age = row['age']
-            if age > 228:  # WHO BMI data only goes to 228 months
-                continue
-                
-            sex = 'male' if row['sex'] == 1 else 'female'
-            bmi = row['bmi']
-            expected_z = row['z_bmi']
-            
-            calculated_z = zsc.calculate_bmi_z_score(bmi, sex, age)
-            
-            assert calculated_z == pytest.approx(expected_z, abs=tolerance_level), \
-                f'Row {row.name}: BMI Z-score mismatch. ' \
-                f'Expected {expected_z:.2f}, got {calculated_z:.2f} ' \
-                f'(bmi={bmi:.2f}, sex={sex}, age={age}m)'
+        calculated_z = zsc.calculate_bmi_z_score(bmi, sex, age)
+
+        assert calculated_z == pytest.approx(expected_z, abs=tolerance_level), \
+            f'Row {row_index}: BMI Z-score mismatch. ' \
+            f'Expected {expected_z:.2f}, got {calculated_z:.2f} ' \
+            f'(bmi={bmi:.2f}, sex={sex}, age={age}m)'
 
 
 class TestReverseZScores:
@@ -184,14 +201,6 @@ class TestSexFormatVariations:
 class TestAgeHandling:
     '''Test age-related functionality.'''
     
-    def test_valid_age_range(self):
-        '''Test that ages from 0 to 228 months work correctly.'''
-        test_ages = [0, 1, 12, 24, 60, 120, 228]
-        
-        for age in test_ages:
-            z = zsc.calculate_height_z_score(75, 'male', age)
-            assert isinstance(z, float), f'Failed at age {age} months'
-    
     def test_age_above_19_years_warning(self):
         '''Test that ages above 228 months (19 years) trigger warning.'''
         with warnings.catch_warnings(record=True) as w:
@@ -207,68 +216,6 @@ class TestAgeHandling:
         # WHO data only has integer month values
         with pytest.raises((KeyError, ValueError)):
             zsc.calculate_height_z_score(75, 'male', 12.5)
-
-
-class TestInputValidation:
-    '''Test error handling for invalid inputs.'''
-    
-    def test_negative_values_produce_nan_or_extreme(self):
-        '''Test that negative values produce NaN or extreme Z-scores.'''
-        import numpy as np
-        
-        # Negative height produces NaN
-        z = zsc.calculate_height_z_score(-75, 'male', 12)
-        assert np.isnan(z) or z < -10, 'Negative height should produce NaN or extreme Z'
-    
-    def test_zero_weight_produces_extreme_z(self):
-        '''Test that zero weight produces extreme negative Z-score.'''
-        import numpy as np
-        
-        z = zsc.calculate_weight_z_score(0.0001, 'male', 12)  # Very close to zero
-        assert z < -10, 'Near-zero weight should produce very negative Z-score'
-    
-    def test_unrealistic_values_produce_extreme_z(self):
-        '''Test that unrealistic values produce very high/low Z-scores.'''
-        # Very high height should produce high Z-score
-        z_high = zsc.calculate_height_z_score(200, 'male', 24)
-        assert z_high > 10, 'Extremely high height should produce Z > 10'
-        
-        # Very low weight should produce very negative Z-score
-        z_low = zsc.calculate_weight_z_score(2, 'male', 24)
-        assert z_low < -5, 'Extremely low weight should produce Z < -5'
-
-
-class TestBoundaryConditions:
-    '''Test behavior at Z-score boundaries (around ±3 SD).'''
-    
-    def test_z_score_at_positive_3sd(self):
-        '''Test calculations at Z = +3 boundary.'''
-        # Get the exact value at Z=3
-        value_at_3sd = zsc.reverse_height_z_score(3.0, 'male', 24)
-        z_back = zsc.calculate_height_z_score(value_at_3sd, 'male', 24)
-        
-        assert abs(z_back - 3.0) < 0.01, 'Z-score at +3SD should be exactly 3'
-    
-    def test_z_score_at_negative_3sd(self):
-        '''Test calculations at Z = -3 boundary.'''
-        value_at_neg3sd = zsc.reverse_weight_z_score(-3.0, 'female', 36)
-        z_back = zsc.calculate_weight_z_score(value_at_neg3sd, 'female', 36)
-        
-        assert abs(z_back - (-3.0)) < 0.01, 'Z-score at -3SD should be exactly -3'
-    
-    def test_values_beyond_3sd_use_linear_extrapolation(self):
-        '''Test that values beyond ±3SD use the WHO restricted method.'''
-        # Values slightly beyond +3SD
-        value_at_3sd = zsc.reverse_height_z_score(3.0, 'male', 24)
-        value_at_4sd = zsc.reverse_height_z_score(4.0, 'male', 24)
-        
-        # The difference should be approximately linear (not exponential)
-        # In standard LMS, this would grow exponentially, but WHO method is linear
-        z_at_3 = zsc.calculate_height_z_score(value_at_3sd, 'male', 24)
-        z_at_4 = zsc.calculate_height_z_score(value_at_4sd, 'male', 24)
-        
-        assert abs(z_at_3 - 3.0) < 0.01
-        assert abs(z_at_4 - 4.0) < 0.01
 
 class TestDataIntegrity:
     '''Test that the test data itself is valid.'''

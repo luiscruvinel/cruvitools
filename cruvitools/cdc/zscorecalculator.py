@@ -1,18 +1,37 @@
 import numpy as np
 import pandas as pd
-from scipy.stats import norm
+
+from statistics import NormalDist
+norm = NormalDist()
 
 from pathlib import Path
 from warnings import warn
 
 base_path = Path(__file__).resolve().parent / 'reference-data'
+_reference_data = None
 
-boys_height = pd.read_pickle(base_path / 'boys_height.pkl').set_index('Month', drop=True)
-girls_height = pd.read_pickle(base_path / 'girls_height.pkl').set_index('Month', drop=True)
-boys_weight = pd.read_pickle(base_path / 'boys_weight.pkl').set_index('Month', drop=True)
-girls_weight = pd.read_pickle(base_path / 'girls_weight.pkl').set_index('Month', drop=True)
-boys_bmi = pd.read_pickle(base_path / 'boys_bmi.pkl').set_index('Month', drop=True)
-girls_bmi = pd.read_pickle(base_path / 'girls_bmi.pkl').set_index('Month', drop=True)
+# Helper functions for input validation and warnings
+def _warning_extreme_results(z):
+    '''
+    If the result is extreme, remember the user that the functions expect age in months, weight in kg and height in cm.
+    '''
+    if abs(z) >= 7:
+        warn(f'Calculated Z-score of {z} is extreme. Make sure that age is provided in months, height in cm, and weight in kg')
+
+def _load_reference_data():
+    global _reference_data
+
+    if _reference_data is None:
+        _reference_data = {
+            'boys_height': pd.read_pickle(base_path / 'boys_height.pkl').set_index('Month', drop=True),
+            'girls_height': pd.read_pickle(base_path / 'girls_height.pkl').set_index('Month', drop=True),
+            'boys_weight': pd.read_pickle(base_path / 'boys_weight.pkl').set_index('Month', drop=True),
+            'girls_weight': pd.read_pickle(base_path / 'girls_weight.pkl').set_index('Month', drop=True),
+            'boys_bmi': pd.read_pickle(base_path / 'boys_bmi.pkl').set_index('Month', drop=True),
+            'girls_bmi': pd.read_pickle(base_path / 'girls_bmi.pkl').set_index('Month', drop=True),
+        }
+
+    return _reference_data
 
 
 def _get_lms_parameters(sex, age, data_boys, data_girls):
@@ -29,6 +48,7 @@ def _get_lms_parameters(sex, age, data_boys, data_girls):
         dict with 'L', 'M', 'S' parameters (interpolated if age falls between data points)
     '''
     
+    # Handle different sex inputs
     sex_normalized = sex.lower() if isinstance(sex, str) else sex
     
     if sex_normalized in ['male', 'm', 1]:
@@ -37,7 +57,8 @@ def _get_lms_parameters(sex, age, data_boys, data_girls):
         data = data_girls
     else:
         raise ValueError(f'Invalid sex value: {sex}. Must be "male/m/1" or "female/f/2"')
-        
+    
+    # Handle different age inputs
     available_ages = data.index.values
     max_age = data.index.max()
     min_age = data.index.min()
@@ -55,7 +76,7 @@ def _get_lms_parameters(sex, age, data_boys, data_girls):
             'L': float(data.loc[age, 'L']),
             'M': float(data.loc[age, 'M']),
             'S': float(data.loc[age, 'S']),
-            'p95': float(data.loc[age, 'P95'])
+            'P95': float(data.loc[age, 'P95'])
         }
         if 'sigma' in data.columns:
             params['sigma'] = float(data.loc[age, 'sigma'])
@@ -73,11 +94,7 @@ def _get_lms_parameters(sex, age, data_boys, data_girls):
         for param in ['L', 'M', 'S', 'P95']:
             lower_val = float(data.loc[lower_age, param])
             upper_val = float(data.loc[upper_age, param])
-            params[param.lower() if param == 'P95' else param] = lower_val + weight * (upper_val - lower_val)
-        
-        # Rename P95 to p95 for consistency
-        if 'P95' in params:
-            params['p95'] = params.pop('P95')
+            params[param] = lower_val + weight * (upper_val - lower_val)
         
         if 'sigma' in data.columns:
             lower_sigma = float(data.loc[lower_age, 'sigma'])
@@ -93,7 +110,7 @@ def _calculate_z_score(measurement, sex, age, data_boys, data_girls):
     
     Uses the CDC LMS formula:
     Z = ((X/M)^L - 1) / (L*S)  when L ≠ 0
-    Z = ln(X/M) / S             when L = 0
+    Z = ln(X/M) / S            when L = 0
     
     Args:
         measurement: The measurement value (height in cm or weight in kg)
@@ -165,14 +182,12 @@ def _calculate_extreme_z_score(bmi, sex, age, data_boys, data_girls):
     '''
     params = _get_lms_parameters(sex, age, data_boys, data_girls)
     
-    L = params['L']
-    M = params['M']
-    S = params['S']
     sigma = params['sigma']
-    p95 = params['p95']
+    P95 = params['P95']
 
-    centile = 90 + 10 * norm.cdf((bmi - p95) / sigma)
-    Z = norm.ppf(centile/100)
+    centile = 90 + 10 * norm.cdf((bmi - P95) / sigma)
+    centile = np.clip(centile, 0, np.nextafter(100.0, 0.0))
+    Z = norm.inv_cdf(centile/100)
 
     return Z
 
@@ -188,7 +203,8 @@ def calculate_height_z_score(height, sex, age):
     Returns:
         float: height-for-age Z-score
     '''
-    return _calculate_z_score(height, sex, age, boys_height, girls_height)
+    reference_data = _load_reference_data()
+    return _calculate_z_score(height, sex, age, reference_data['boys_height'], reference_data['girls_height'])
 
 
 def calculate_weight_z_score(weight, sex, age):
@@ -203,7 +219,8 @@ def calculate_weight_z_score(weight, sex, age):
     Returns:
         float: Z-score for weight-for-age
     '''
-    return _calculate_z_score(weight, sex, age, boys_weight, girls_weight)
+    reference_data = _load_reference_data()
+    return _calculate_z_score(weight, sex, age, reference_data['boys_weight'], reference_data['girls_weight'])
 
 
 def reverse_height_z_score(z_score, sex, age):
@@ -218,7 +235,8 @@ def reverse_height_z_score(z_score, sex, age):
     Returns:
         float: Height in centimeters
     '''
-    return _reverse_z_score(z_score, sex, age, boys_height, girls_height)
+    reference_data = _load_reference_data()
+    return _reverse_z_score(z_score, sex, age, reference_data['boys_height'], reference_data['girls_height'])
 
 
 def reverse_weight_z_score(z_score, sex, age):
@@ -233,35 +251,43 @@ def reverse_weight_z_score(z_score, sex, age):
     Returns:
         float: Weight in kilograms
     '''
-    return _reverse_z_score(z_score, sex, age, boys_weight, girls_weight)
+    reference_data = _load_reference_data()
+    return _reverse_z_score(z_score, sex, age, reference_data['boys_weight'], reference_data['girls_weight'])
 
 
-def calculate_bmi_z_score(bmi, sex, age):
+def calculate_bmi_z_score(bmi, sex, age, method='extended'):
     '''
-    Calculate CDC BMI-for-age Z-score using LMS method with extreme value handling.
-    
-    For extreme BMI values (Z < -3 or Z > 3), uses modified calculation
-    following Wei et al. 2020 recommendations to prevent unrealistic extrapolation.
-    
+    Calculate CDC BMI-for-age Z-score using LMS method.
+
     Args:
         bmi: BMI value (kg/m²)
         sex: 'male', 'female', 'M', 'F', 'm', 'f', 1, or 2
         age: Age in months
-    
+        method: 'original' returns the standard LMS Z-score for any value;
+            'extended' uses CDC extended bmi tables for values above 95th centile.
+
     Returns:
         float: BMI-for-age Z-score
     '''
-    Z = _calculate_z_score(bmi, sex, age, boys_bmi, girls_bmi)
+    if method not in {'original', 'extended'}:
+        raise ValueError("method must be 'original' or 'extended'")
+
+    reference_data = _load_reference_data()
+    Z = _calculate_z_score(bmi, sex, age, reference_data['boys_bmi'], reference_data['girls_bmi'])
+
+    if method == 'original':
+        return Z
+
     centile = norm.cdf(Z) * 100
+    centile = np.clip(centile, 0, np.nextafter(100.0, 0.0))
 
     if centile <= 95:
         return Z
-    
-    else:
-        return _calculate_extreme_z_score(bmi, sex, age, boys_bmi, girls_bmi)
+
+    return _calculate_extreme_z_score(bmi, sex, age, reference_data['boys_bmi'], reference_data['girls_bmi'])
 
 
-def reverse_bmi_z_score(z_score, sex, age):
+def reverse_bmi_z_score(z_score, sex, age, method='extended'):
     '''
     Calculate BMI from CDC BMI-for-age Z-score using LMS method.
 
@@ -269,21 +295,31 @@ def reverse_bmi_z_score(z_score, sex, age):
         z_score: Target Z-score
         sex: 'male', 'female', 'M', 'F', 'm', 'f', 1, or 2
         age: Age in months
+        method: 'original' returns the standard inverse LMS BMI value for any z-score;
+            'extended' uses the data from CDC extended BMI tables.
     
     Returns:
         float: BMI value (kg/m²)
     '''
+    if method not in {'original', 'extended'}:
+        raise ValueError("method must be 'original' or 'extended'")
+
+    if method == 'original':
+        reference_data = _load_reference_data()
+        return _reverse_z_score(z_score, sex, age, reference_data['boys_bmi'], reference_data['girls_bmi'])
 
     centile = norm.cdf(z_score) * 100
-    
+    centile = np.clip(centile, 0, np.nextafter(100.0, 0.0))
+
     if centile <= 95:
-        return _reverse_z_score(z_score, sex, age, boys_bmi, girls_bmi)
-    
-    else:
-        params = _get_lms_parameters(sex, age, boys_bmi, girls_bmi)
-        
-        sigma = params['sigma']
-        p95 = params['p95']
-        bmi = p95 + sigma * norm.ppf((centile - 90) / 10)
-        
-        return bmi
+        reference_data = _load_reference_data()
+        return _reverse_z_score(z_score, sex, age, reference_data['boys_bmi'], reference_data['girls_bmi'])
+
+    reference_data = _load_reference_data()
+    params = _get_lms_parameters(sex, age, reference_data['boys_bmi'], reference_data['girls_bmi'])
+
+    sigma = params['sigma']
+    P95 = params['P95']
+    bmi = P95 + sigma * norm.inv_cdf((centile - 90) / 10)
+
+    return bmi
